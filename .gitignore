@@ -1,0 +1,29 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+venv/
+ENV/
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints
+
+# --- Результаты наших расчетов ---
+# Игнорируем логи и графики, чтобы в Git попадал только код
+quantum_research_results.txt
+quantum_research_plot.png
+brisbane_127q_results.png
+brisbane_127q_final.png
+results.txt
+final_plot.png
+result.png
+quantum_result_plot.png
+
+# --- Системные файлы Mac ---
+.DS_Store
+
+# --- Настройки VS Code / PyCharm ---
+.vscode/
+.idea/
