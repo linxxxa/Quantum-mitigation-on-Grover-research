@@ -35,8 +35,7 @@ data = {
 # --- ПОСТРОЕНИЕ ГРАФИКА ---
 try:
     plt.figure(figsize=(10, 6))
-    # Цветовая схема: от холодного серого к теплому оранжевому
-    colors = ['#34495e', '#3498db', '#9b59b6', '#e67e22']
+    colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
     bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', width=0.6)
 
     plt.title('Case 3: Stress Test - Signal Recovery under Extreme Noise', fontsize=14, fontweight='bold')
@@ -60,7 +59,6 @@ try:
     plt.savefig(img_path, dpi=150)
     plt.close()
     
-    # Сохранение текста
     with open(res_path, "w", encoding="utf-8") as f:
         f.write(f"CASE 3: STRESS TEST REPORT | {datetime.now()}\n" + "="*50 + "\n")
         for k, v in data.items():
