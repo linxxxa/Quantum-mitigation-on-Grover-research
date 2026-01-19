@@ -88,7 +88,7 @@ for k, v in data.items(): log(f"{k}: {v:.4f}")
 # --- 5. ГРАФИК ---
 plt.figure(figsize=(10, 6))
 # Цвета: Темный (провал), Синий, Фиолетовый (XY4), Оранжевый (Hybrid)
-colors = ['#2c3e50', '#3498db', '#8e44ad', '#d35400']
+colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
 bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', width=0.6)
 
 plt.title('Case 3: Stress Test (Low Coherence & XY4 Synergy)', fontsize=13)
