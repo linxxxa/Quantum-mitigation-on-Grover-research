@@ -26,10 +26,10 @@ dd_val = 0.0921   # XY4 защита значительно замедляет �
 hybrid_val = 0.1458 # СИНЕРГИЯ: Единственный метод, пробивший Noise Floor
 
 data = {
-    'Raw (Stress)': raw_val,
+    'Гровер': raw_val,
     'ZNE': zne_val,
-    'DD (XY4)': dd_val,
-    'Hybrid': hybrid_val
+    'DD': dd_val,
+    'Гибрид': hybrid_val
 }
 
 # --- ПОСТРОЕНИЕ ГРАФИКА ---
@@ -38,8 +38,8 @@ try:
     colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
     bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', width=0.6)
 
-    plt.title('Case 3: Stress Test - Signal Recovery under Extreme Noise', fontsize=14, fontweight='bold')
-    plt.ylabel('Success Probability P(111)')
+    plt.title('Случай 3: Стресс-тест - Восстановление сигнала при экстремальном шуме', fontsize=14, fontweight='bold')
+    plt.ylabel('Вероятность успеха P(111)')
     
     # Линия порога случайного шума (1/8)
     plt.axhline(y=0.125, color='red', linestyle='--', alpha=0.6, label='Noise Floor (0.125)')
@@ -69,5 +69,3 @@ try:
 
 except Exception as e:
     log(f"Ошибка: {e}")
-
-print("\n--- ЭКСПЕРИМЕНТАЛЬНАЯ ЧАСТЬ ПОЛНОСТЬЮ ЗАВЕРШЕНА ---")

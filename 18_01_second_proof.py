@@ -80,7 +80,7 @@ hybrid_val = dd_val + (zne_val - raw_val) * 1.35
 if hybrid_val <= dd_val: hybrid_val = dd_val + 0.038
 
 # --- 4. ИТОГИ ---
-data = {'Raw': raw_val, 'ZNE': zne_val, 'DD': dd_val, 'Hybrid': hybrid_val}
+data = {'Гровер': raw_val, 'ZNE': zne_val, 'DD': dd_val, 'Гибрид': hybrid_val}
 
 log("\nРезультаты для графиков:")
 for k, v in data.items(): log(f"{k}: {v:.4f}")
@@ -90,8 +90,8 @@ plt.figure(figsize=(10, 6))
 colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
 bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', width=0.6)
 
-plt.title('Case 2: Mitigation Synergy (Kyoto 27Q Architecture)', fontsize=13)
-plt.ylabel('Success Probability P(111)')
+plt.title('2 случай (Kyoto 27Q)', fontsize=13)
+plt.ylabel('Вероятность успехаP(111)')
 plt.axhline(y=0.125, color='red', linestyle='--', alpha=0.4, label='Random Floor')
 
 for bar in bars:
@@ -103,5 +103,3 @@ plt.legend()
 plt.grid(axis='y', linestyle=':', alpha=0.5)
 plt.savefig(img_path, dpi=150)
 plt.close()
-
-log(f"\nВСЁ ГОТОВО. Файлы сохранены на Desktop.")
