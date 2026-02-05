@@ -1,105 +1,89 @@
 import os
+import numpy as np
 import matplotlib
 matplotlib.use('Agg') 
 import matplotlib.pyplot as plt
-from datetime import datetime
-
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from qiskit_ibm_runtime.fake_provider import FakeKyoto
-from qiskit.circuit.library import XGate
-from qiskit.transpiler import PassManager, InstructionDurations
-from qiskit.transpiler.passes import ALAPScheduleAnalysis, PadDynamicalDecoupling
 
-# --- ПУТИ ---
+# --- КОНФИГУРАЦИЯ ---
 desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-res_path = os.path.join(desktop, "results_case2_kyoto.txt")
-img_path = os.path.join(desktop, "plot_case2_kyoto.png")
+img_path = os.path.join(desktop, "synergy_final_v6.png")
 
-def log(text):
-    print(text)
-    with open(res_path, "a", encoding="utf-8") as f: f.write(text + "\n")
-
-# --- 1. СЕТАП ---
 backend = FakeKyoto()
 noise_sim = AerSimulator.from_backend(backend)
 
-def run_final(qc, shots=10000):
-    """
-    Выполняет схему 'как есть' без повторной транспиляции, 
-    чтобы избежать ошибок планирования.
-    """
-    # Мы не вызываем transpile() здесь повторно!
-    job = noise_sim.run(qc, shots=shots)
-    return job.result().get_counts().get('111', 0) / shots
+def fold_manually_stable(qc, scale=3):
+    """Стабильный фолдинг для ZNE"""
+    folded = QuantumCircuit(*qc.qregs, *qc.cregs)
+    for inst in qc.data:
+        folded.append(inst.operation, inst.qubits, inst.clbits)
+        if inst.operation.name not in ['barrier', 'measure']:
+            for _ in range(scale - 1):
+                folded.append(inst.operation, inst.qubits, inst.clbits)
+    return folded
 
-# --- 2. ФУНКЦИЯ ПОДГОТОВКИ DD ---
-def get_ready_dd_circuit(qc, backend):
-    durations = InstructionDurations.from_backend(backend)
-    # Сразу транспилируем под бэкенд с включенным планированием
-    t_qc = transpile(qc, backend, optimization_level=1, scheduling_method='alap')
-    
-    pm = PassManager([
-        ALAPScheduleAnalysis(durations), 
-        PadDynamicalDecoupling(durations, [XGate(), XGate()])
-    ])
-    return pm.run(t_qc)
+def add_dd_manual_stable(qc):
+    """Добавление легкой DD защиты (X-X) перед измерениями"""
+    new_qc = QuantumCircuit(*qc.qregs, *qc.cregs)
+    for inst in qc.data:
+        if inst.operation.name == 'measure':
+            new_qc.barrier()
+            for i in range(3):
+                new_qc.x(i)
+                new_qc.x(i)
+            new_qc.barrier()
+        new_qc.append(inst.operation, inst.qubits, inst.clbits)
+    return new_qc
 
-# --- 3. ЭКСПЕРИМЕНТ ---
-with open(res_path, "w", encoding="utf-8") as f:
-    f.write(f"CASE 2: KYOTO 27Q - STABLE RUN | {datetime.now()}\n" + "="*50 + "\n")
+# --- ЭКСПЕРИМЕНТ ---
+print(">>> Запуск финальной симуляции (V6)...")
 
-qc = QuantumCircuit(3)
-qc.h(range(3))
-qc.ccz(0, 1, 2)
-qc.h(range(3))
-qc.measure_all()
+base_qc = QuantumCircuit(3)
+base_qc.h(range(3))
+base_qc.cx(0, 1)
+base_qc.cx(1, 2)
+base_qc.h(range(3))
+base_qc.measure_all()
 
-log("Запуск эксперимента...")
+# Опорная транспиляция
+t_raw = transpile(base_qc, noise_sim, optimization_level=1)
 
 # 1. RAW
-# Для корректной работы с шумом транспилируем один раз
-raw_qc = transpile(qc, noise_sim, optimization_level=0)
-raw_val = run_final(raw_qc)
-log(f"Raw: {raw_val:.4f}")
+p_raw = noise_sim.run(t_raw, shots=10000).result().get_counts().get('111', 0) / 10000
 
-# 2. DD
-log("Применение DD защиты...")
-dd_qc = get_ready_dd_circuit(qc, backend)
-# dd_qc уже транспилирован под бэкенд, AerSimulator его поймет
-dd_val = run_final(dd_qc)
-log(f"DD: {dd_val:.4f}")
+# 2. ZNE (Правильный вызов fold_manually_stable)
+t_zne_s3 = fold_manually_stable(t_raw, scale=3)
+p_raw_s3 = noise_sim.run(t_zne_s3, shots=10000).result().get_counts().get('111', 0) / 10000
+p_zne = p_raw + (p_raw - p_raw_s3) * 0.5
 
-# 3. МАТЕМАТИЧЕСКАЯ МОДЕЛЬ (ZNE & HYBRID)
-# Так как честный ZNE на симуляторах часто выдает шум, 
-# используем калиброванные значения для статьи
-zne_val = raw_val + 0.0195
-hybrid_val = dd_val + (zne_val - raw_val) * 1.35
+# 3. DD (Правильный вызов без scale)
+t_dd = add_dd_manual_stable(t_raw)
+p_dd = noise_sim.run(t_dd, shots=10000).result().get_counts().get('111', 0) / 10000
 
-# Финальная проверка на 'лесенку'
-if hybrid_val <= dd_val: hybrid_val = dd_val + 0.038
+# 4. HYBRID
+t_hybrid_s3 = fold_manually_stable(t_dd, scale=3)
+p_dd_s3 = noise_sim.run(t_hybrid_s3, shots=10000).result().get_counts().get('111', 0) / 10000
+p_hybrid = p_dd + (p_dd - p_dd_s3) * 0.5
 
-# --- 4. ИТОГИ ---
-data = {'Гровер': raw_val, 'ZNE': zne_val, 'DD': dd_val, 'Гибрид': hybrid_val}
+# --- РЕЗУЛЬТАТЫ ---
+data = {'Raw': p_raw, 'ZNE': p_zne, 'DD': p_dd, 'Гибрид': p_hybrid}
+print(f"Результаты: {data}")
 
-log("\nРезультаты для графиков:")
-for k, v in data.items(): log(f"{k}: {v:.4f}")
-
-# --- 5. ГРАФИК ---
+# Отрисовка
 plt.figure(figsize=(10, 6))
 colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
-bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', width=0.6)
-
-plt.title('2 случай (Kyoto 27Q)', fontsize=13)
-plt.ylabel('Вероятность успехаP(111)')
-plt.axhline(y=0.125, color='red', linestyle='--', alpha=0.4, label='Случайный выбор')
+bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black')
+plt.axhline(y=0.125, color='red', linestyle='--', alpha=0.5, label='Порог (1/8)')
+plt.title('Квантовая митигация ошибок: Эффект синергии (V6)', fontsize=14)
+plt.ylabel('Вероятность успеха P(111)')
 
 for bar in bars:
     y = bar.get_height()
-    plt.text(bar.get_x() + bar.get_width()/2, y + 0.003, f"{y:.4f}", 
-             ha='center', va='bottom', fontweight='bold')
+    plt.text(bar.get_x() + bar.get_width()/2, y + 0.005, f"{y:.4f}", ha='center', fontweight='bold')
 
+plt.ylim(0, max(data.values()) * 1.3)
 plt.legend()
-plt.grid(axis='y', linestyle=':', alpha=0.5)
-plt.savefig(img_path, dpi=150)
-plt.close()
+plt.savefig(img_path)
+print(">>> Успех! Файл сохранен.")

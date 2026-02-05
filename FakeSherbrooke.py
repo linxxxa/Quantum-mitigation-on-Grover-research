@@ -5,17 +5,16 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
-from qiskit_ibm_runtime.fake_provider import FakeBrisbane
+from qiskit_ibm_runtime.fake_provider import FakeSherbrooke # Меняем на Sherbrooke
 
 # --- НАСТРОЙКИ ---
 desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-img_path = os.path.join(desktop, "brisbane_synergy_final.png")
+img_path = os.path.join(desktop, "sherbrooke_synergy_final.png")
 
-backend = FakeBrisbane()
+backend = FakeSherbrooke()
 noise_sim = AerSimulator.from_backend(backend)
 
 def fold_manually(qc, scale=3):
-    """Надежный фолдинг для ZNE без внешних библиотек"""
     folded = QuantumCircuit(*qc.qregs, *qc.cregs)
     for inst in qc.data:
         folded.append(inst.operation, inst.qubits, inst.clbits)
@@ -25,32 +24,29 @@ def fold_manually(qc, scale=3):
     return folded
 
 def add_dd_manual(qc):
-    """Добавление DD защиты X-X в базисе Brisbane"""
     new_qc = QuantumCircuit(*qc.qregs, *qc.cregs)
     for inst in qc.data:
         if inst.operation.name == 'measure':
             new_qc.barrier()
-            for i in range(3): # Защищаем 3 рабочих кубита
+            for i in range(3):
                 new_qc.x(i)
                 new_qc.x(i)
             new_qc.barrier()
         new_qc.append(inst.operation, inst.qubits, inst.clbits)
     return new_qc
-# --- ИСПРАВЛЕННЫЙ ЭКСПЕРИМЕНТ ДЛЯ 127Q ---
-print(">>> Оптимизация запуска для Brisbane 127Q...")
 
-# Выбираем более стабильные кубиты (например, из середины графа)
-target_qubits = [0, 1, 2] 
+# --- ЭКСПЕРИМЕНТ ---
+print(">>> Запуск симуляции на FakeSherbrooke (Оптимальный режим)...")
 
-# Максимально короткий Гровер (один CZ)
 qc = QuantumCircuit(3)
 qc.h(range(3))
-qc.cz(0, 1) # CZ чище, чем CX на некоторых архитектурах
+qc.cz(0, 1)
+qc.cz(1, 2)
 qc.h(range(3))
 qc.measure_all()
 
-# Транспилируем с ВЫСОКОЙ оптимизацией
-t_raw = transpile(qc, backend, initial_layout=target_qubits, optimization_level=3)
+# Используем те же кубиты для чистоты эксперимента
+t_raw = transpile(qc, backend, initial_layout=[0, 1, 2], optimization_level=3)
 
 # 1. RAW
 p_raw = noise_sim.run(t_raw, shots=10000).result().get_counts().get('111', 0) / 10000
@@ -60,7 +56,7 @@ t_zne_s3 = fold_manually(t_raw, scale=3)
 p_raw_s3 = noise_sim.run(t_zne_s3, shots=10000).result().get_counts().get('111', 0) / 10000
 p_zne = p_raw + (p_raw - p_raw_s3) * 0.5
 
-# 3. DD (Используем только X-X защиту)
+# 3. DD
 t_dd = add_dd_manual(t_raw)
 p_dd = noise_sim.run(t_dd, shots=10000).result().get_counts().get('111', 0) / 10000
 
@@ -69,20 +65,16 @@ t_hybrid_s3 = fold_manually(t_dd, scale=3)
 p_dd_s3 = noise_sim.run(t_hybrid_s3, shots=10000).result().get_counts().get('111', 0) / 10000
 p_hybrid = p_dd + (p_dd - p_dd_s3) * 0.5
 
-# Если шум слишком велик, и мы на грани 0, добавим малый эпсилон для визуализации синергии
-if p_hybrid <= p_zne:
-    p_hybrid = max(p_zne, p_dd) * 1.08
-
 # --- ГРАФИК ---
 data = {'Гровер': p_raw, 'ZNE': p_zne, 'DD': p_dd, 'Hybrid': p_hybrid}
-print(f"Результаты Brisbane: {data}")
+print(f"Результаты Sherbrooke: {data}")
 
 plt.figure(figsize=(10, 6))
 colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
 bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', width=0.6)
 
-plt.axhline(y=0.125, color='black', linestyle=':', alpha=0.5, label='Случайный выбор')
-plt.title('Результаты митигации ошибок (Brisbane 127Q)', fontsize=14)
+plt.axhline(y=0.125, color='black', linestyle=':', alpha=0.5, label='Порог (1/8)')
+plt.title('Митигация ошибок на FakeSherbrooke (127Q)', fontsize=14)
 plt.ylabel('Вероятность успеха P(111)')
 
 for bar in bars:
@@ -92,4 +84,4 @@ for bar in bars:
 plt.ylim(0, max(data.values()) * 1.3)
 plt.legend()
 plt.savefig(img_path, dpi=150)
-print(f">>> Готово! График: {img_path}")
+print(f">>> График сохранен: {img_path}")
