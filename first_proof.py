@@ -137,7 +137,7 @@ try:
     bars = plt.bar(results.keys(), results.values(), color=custom_colors, edgecolor='black', width=0.6)
     
     plt.axhline(y=1.0, color='red', linestyle='--', alpha=0.3, label='Ideal')
-    plt.axhline(y=0.125, color='black', linestyle=':', alpha=0.5, label='Noise Floor (0.125)')
+    plt.axhline(y=0.125, color='black', linestyle=':', alpha=0.5, label='Случайный выбор')
     
     plt.title('Квантовая митигация ошибок результаты (Brisbane 127Q)', fontsize=14)
     plt.ylabel('Вероятность успеха |111>', fontsize=12)

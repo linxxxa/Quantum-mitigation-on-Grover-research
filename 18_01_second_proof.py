@@ -92,7 +92,7 @@ bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', widt
 
 plt.title('2 случай (Kyoto 27Q)', fontsize=13)
 plt.ylabel('Вероятность успехаP(111)')
-plt.axhline(y=0.125, color='red', linestyle='--', alpha=0.4, label='Random Floor')
+plt.axhline(y=0.125, color='red', linestyle='--', alpha=0.4, label='Случайный выбор')
 
 for bar in bars:
     y = bar.get_height()
