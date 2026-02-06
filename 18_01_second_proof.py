@@ -68,7 +68,7 @@ p_dd_s3 = noise_sim.run(t_hybrid_s3, shots=10000).result().get_counts().get('111
 p_hybrid = p_dd + (p_dd - p_dd_s3) * 0.5
 
 # --- РЕЗУЛЬТАТЫ ---
-data = {'Raw': p_raw, 'ZNE': p_zne, 'DD': p_dd, 'Гибрид': p_hybrid}
+data = {'Гровер': p_raw, 'ZNE': p_zne, 'DD': p_dd, 'Гибрид': p_hybrid}
 print(f"Результаты: {data}")
 
 # Отрисовка
@@ -76,7 +76,7 @@ plt.figure(figsize=(10, 6))
 colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
 bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black')
 plt.axhline(y=0.125, color='red', linestyle='--', alpha=0.5, label='Порог (1/8)')
-plt.title('Квантовая митигация ошибок: Эффект синергии (V6)', fontsize=14)
+plt.title('Квантовая митигация ошибок: Kyoto', fontsize=14)
 plt.ylabel('Вероятность успеха P(111)')
 
 for bar in bars:

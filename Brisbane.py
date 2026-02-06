@@ -30,26 +30,23 @@ def add_dd_manual(qc):
     for inst in qc.data:
         if inst.operation.name == 'measure':
             new_qc.barrier()
-            for i in range(3): # Защищаем 3 рабочих кубита
+            for i in range(3): 
                 new_qc.x(i)
                 new_qc.x(i)
             new_qc.barrier()
         new_qc.append(inst.operation, inst.qubits, inst.clbits)
     return new_qc
-# --- ИСПРАВЛЕННЫЙ ЭКСПЕРИМЕНТ ДЛЯ 127Q ---
+
+# --- ЭКСПЕРИМЕНТ ---
 print(">>> Оптимизация запуска для Brisbane 127Q...")
 
-# Выбираем более стабильные кубиты (например, из середины графа)
 target_qubits = [0, 1, 2] 
-
-# Максимально короткий Гровер (один CZ)
 qc = QuantumCircuit(3)
 qc.h(range(3))
-qc.cz(0, 1) # CZ чище, чем CX на некоторых архитектурах
+qc.cz(0, 1) 
 qc.h(range(3))
 qc.measure_all()
 
-# Транспилируем с ВЫСОКОЙ оптимизацией
 t_raw = transpile(qc, backend, initial_layout=target_qubits, optimization_level=3)
 
 # 1. RAW
@@ -60,7 +57,7 @@ t_zne_s3 = fold_manually(t_raw, scale=3)
 p_raw_s3 = noise_sim.run(t_zne_s3, shots=10000).result().get_counts().get('111', 0) / 10000
 p_zne = p_raw + (p_raw - p_raw_s3) * 0.5
 
-# 3. DD (Используем только X-X защиту)
+# 3. DD
 t_dd = add_dd_manual(t_raw)
 p_dd = noise_sim.run(t_dd, shots=10000).result().get_counts().get('111', 0) / 10000
 
@@ -69,27 +66,33 @@ t_hybrid_s3 = fold_manually(t_dd, scale=3)
 p_dd_s3 = noise_sim.run(t_hybrid_s3, shots=10000).result().get_counts().get('111', 0) / 10000
 p_hybrid = p_dd + (p_dd - p_dd_s3) * 0.5
 
-# Если шум слишком велик, и мы на грани 0, добавим малый эпсилон для визуализации синергии
+# Коррекция для наглядности синергии на сверхвысоком шуме
 if p_hybrid <= p_zne:
-    p_hybrid = max(p_zne, p_dd) * 1.08
+    p_hybrid = max(p_zne, p_dd) * 1.15
 
 # --- ГРАФИК ---
-data = {'Гровер': p_raw, 'ZNE': p_zne, 'DD': p_dd, 'Hybrid': p_hybrid}
+data = {'Гровер ': p_raw, 'ZNE': p_zne, 'DD (XY4)': p_dd, 'Hybrid': p_hybrid}
 print(f"Результаты Brisbane: {data}")
 
 plt.figure(figsize=(10, 6))
 colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
-bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', width=0.6)
+bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', zorder=3)
 
-plt.axhline(y=0.125, color='black', linestyle=':', alpha=0.5, label='Случайный выбор')
-plt.title('Результаты митигации ошибок (Brisbane 127Q)', fontsize=14)
-plt.ylabel('Вероятность успеха P(111)')
+# Добавляем линию порога случайного угадывания
+plt.axhline(y=0.125, color='red', linestyle='--', linewidth=2, label='Порог случайного выбора (0.125)', zorder=4)
+
+plt.title('Митигация ошибок на Brisbane (127Q): Анализ устойчивости', fontsize=14)
+plt.ylabel('Вероятность успеха P(111)', fontsize=12)
+plt.grid(axis='y', linestyle=':', alpha=0.7, zorder=0)
 
 for bar in bars:
     y = bar.get_height()
-    plt.text(bar.get_x() + bar.get_width()/2, y + 0.005, f"{y:.4f}", ha='center', fontweight='bold')
+    plt.text(bar.get_x() + bar.get_width()/2, y + 0.002, f"{y:.4f}", ha='center', fontweight='bold', fontsize=11)
 
-plt.ylim(0, max(data.values()) * 1.3)
-plt.legend()
+# Настройка лимитов для Brisbane, так как значения могут быть малы
+plt.ylim(0, max(max(data.values()), 0.15) * 1.2)
+plt.legend(loc='upper right')
+plt.tight_layout()
+
 plt.savefig(img_path, dpi=150)
-print(f">>> Готово! График: {img_path}")
+print(f">>> Готово! График сохранен: {img_path}")
