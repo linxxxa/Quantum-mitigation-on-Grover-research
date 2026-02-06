@@ -7,92 +7,103 @@ from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from qiskit_ibm_runtime.fake_provider import FakeBrisbane
 
-# --- НАСТРОЙКИ ---
+# --- КОНСТАНТЫ ИССЛЕДОВАНИЯ ---
+SCALE_1 = 1.0
+SCALE_2 = 3.0
+SHOTS = 10000
+NUM_TRIALS = 5
+TARGET_QUBITS = [0, 1, 2]
+
 desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-img_path = os.path.join(desktop, "brisbane_synergy_final.png")
+img_path = os.path.join(desktop, "brisbane_pure_science.png")
 
 backend = FakeBrisbane()
 noise_sim = AerSimulator.from_backend(backend)
 
 def fold_manually(qc, scale=3):
-    """Надежный фолдинг для ZNE без внешних библиотек"""
+    """
+    Локальное свертывание гейтов (U -> U^scale). 
+    Для гейтов H и CZ (где U^2 = I) это эквивалентно масштабированию шума.
+    """
     folded = QuantumCircuit(*qc.qregs, *qc.cregs)
     for inst in qc.data:
         folded.append(inst.operation, inst.qubits, inst.clbits)
         if inst.operation.name not in ['barrier', 'measure']:
-            for _ in range(scale - 1):
+            # Для scale=3 мы добавляем еще 2 выполнения гейта (всего 3)
+            for _ in range(int(scale - 1)):
                 folded.append(inst.operation, inst.qubits, inst.clbits)
     return folded
 
 def add_dd_manual(qc):
-    """Добавление DD защиты X-X в базисе Brisbane"""
+    """Стандартная защита X-X (Spin Echo) перед измерением"""
     new_qc = QuantumCircuit(*qc.qregs, *qc.cregs)
     for inst in qc.data:
         if inst.operation.name == 'measure':
             new_qc.barrier()
             for i in range(3): 
-                new_qc.x(i)
-                new_qc.x(i)
+                new_qc.x(i); new_qc.x(i)
             new_qc.barrier()
         new_qc.append(inst.operation, inst.qubits, inst.clbits)
     return new_qc
 
-# --- ЭКСПЕРИМЕНТ ---
-print(">>> Оптимизация запуска для Brisbane 127Q...")
+def richardson_extrapolation(p1, p2, s1, s2):
+    """
+    Формула линейной экстраполяции Ричардсона к нулевому шуму.
+    P(0) = P(s1) + (P(s1) - P(s2)) / (s2 - s1) * s1
+    """
+    return p1 + (p1 - p2) / (s2 - s1) * s1
 
-target_qubits = [0, 1, 2] 
-qc = QuantumCircuit(3)
-qc.h(range(3))
-qc.cz(0, 1) 
-qc.h(range(3))
-qc.measure_all()
+def run_experiment():
+    # Базовая схема
+    qc = QuantumCircuit(3)
+    qc.h(range(3))
+    qc.cz(0, 1) 
+    qc.h(range(3))
+    qc.measure_all()
+    
+    t_raw = transpile(qc, backend, initial_layout=TARGET_QUBITS, optimization_level=3)
+    
+    # 1. RAW (Lambda = 1)
+    p_s1 = noise_sim.run(t_raw, shots=SHOTS).result().get_counts().get('111', 0) / SHOTS
+    
+    # 2. FOLDED (Lambda = 3)
+    t_s3 = fold_manually(t_raw, scale=SCALE_2)
+    p_s3 = noise_sim.run(t_s3, shots=SHOTS).result().get_counts().get('111', 0) / SHOTS
+    
+    p_zne = richardson_extrapolation(p_s1, p_s3, SCALE_1, SCALE_2)
+    
+    # 3. DD
+    t_dd = add_dd_manual(t_raw)
+    p_dd = noise_sim.run(t_dd, shots=SHOTS).result().get_counts().get('111', 0) / SHOTS
+    
+    # 4. HYBRID (ZNE поверх DD)
+    t_dd_s3 = fold_manually(t_dd, scale=SCALE_2)
+    p_dd_s3 = noise_sim.run(t_dd_s3, shots=SHOTS).result().get_counts().get('111', 0) / SHOTS
+    p_hybrid = richardson_extrapolation(p_dd, p_dd_s3, SCALE_1, SCALE_2)
+    
+    return [p_s1, p_zne, p_dd, p_hybrid]
 
-t_raw = transpile(qc, backend, initial_layout=target_qubits, optimization_level=3)
+# --- ИСПОЛНЕНИЕ ---
+print(f">>> Запуск {NUM_TRIALS} научных тестов для Brisbane...")
+results = np.array([run_experiment() for _ in range(NUM_TRIALS)])
 
-# 1. RAW
-p_raw = noise_sim.run(t_raw, shots=10000).result().get_counts().get('111', 0) / 10000
+means = np.mean(results, axis=0)
+errors = np.std(results, axis=0) 
 
-# 2. ZNE
-t_zne_s3 = fold_manually(t_raw, scale=3)
-p_raw_s3 = noise_sim.run(t_zne_s3, shots=10000).result().get_counts().get('111', 0) / 10000
-p_zne = p_raw + (p_raw - p_raw_s3) * 0.5
 
-# 3. DD
-t_dd = add_dd_manual(t_raw)
-p_dd = noise_sim.run(t_dd, shots=10000).result().get_counts().get('111', 0) / 10000
-
-# 4. HYBRID
-t_hybrid_s3 = fold_manually(t_dd, scale=3)
-p_dd_s3 = noise_sim.run(t_hybrid_s3, shots=10000).result().get_counts().get('111', 0) / 10000
-p_hybrid = p_dd + (p_dd - p_dd_s3) * 0.5
-
-# Коррекция для наглядности синергии на сверхвысоком шуме
-if p_hybrid <= p_zne:
-    p_hybrid = max(p_zne, p_dd) * 1.15
-
-# --- ГРАФИК ---
-data = {'Гровер ': p_raw, 'ZNE': p_zne, 'DD (XY4)': p_dd, 'Hybrid': p_hybrid}
-print(f"Результаты Brisbane: {data}")
-
+labels = ['Raw', 'ZNE (L=3)', 'DD (X-X)', 'Hybrid']
 plt.figure(figsize=(10, 6))
 colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
-bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', zorder=3)
 
-# Добавляем линию порога случайного угадывания
-plt.axhline(y=0.125, color='red', linestyle='--', linewidth=2, label='Порог случайного выбора (0.125)', zorder=4)
+plt.bar(labels, means, yerr=errors, capsize=8, color=colors, edgecolor='black', zorder=3)
+plt.axhline(y=0.125, color='red', linestyle='--', label='Random Guess (0.125)', zorder=4)
 
-plt.title('Митигация ошибок на Brisbane (127Q): Анализ устойчивости', fontsize=14)
-plt.ylabel('Вероятность успеха P(111)', fontsize=12)
-plt.grid(axis='y', linestyle=':', alpha=0.7, zorder=0)
-
-for bar in bars:
-    y = bar.get_height()
-    plt.text(bar.get_x() + bar.get_width()/2, y + 0.002, f"{y:.4f}", ha='center', fontweight='bold', fontsize=11)
-
-# Настройка лимитов для Brisbane, так как значения могут быть малы
-plt.ylim(0, max(max(data.values()), 0.15) * 1.2)
-plt.legend(loc='upper right')
-plt.tight_layout()
+plt.title('Quantum Error Mitigation: Brisbane 127Q Analysis', fontsize=14)
+plt.ylabel('P(111) Success Probability', fontsize=12)
+plt.ylim(0, max(means + errors) * 1.3)
+plt.grid(axis='y', alpha=0.3)
+plt.legend()
 
 plt.savefig(img_path, dpi=150)
-print(f">>> Готово! График сохранен: {img_path}")
+print(f">>> Средние значения: {means}")
+print(f">>> Ошибки: {errors}")
