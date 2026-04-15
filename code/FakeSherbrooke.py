@@ -84,23 +84,37 @@ p_hyb_s3 = noise_sim.run(t_hybrid, shots=SHOTS).result().get_counts().get(TARGET
 p_hybrid = richardson_extrapolation(p_dd, p_hyb_s3, LAMBDA_1, LAMBDA_2)
 
 # --- ГРАФИК ---
-data = {'Raw': p_raw, 'ZNE': p_zne, 'DD': p_dd, 'Hybrid': p_hybrid}
+data = {'Без митигации': p_raw, 'Только ZNE': p_zne, 'Только DD': p_dd, 'Гибрид (DD+ZNE)': p_hybrid}
 print(f"Результаты: {data}")
 
 plt.figure(figsize=(10, 6))
 colors = ['#bdc3c7', '#3498db', '#2ecc71', '#e67e22']
-bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', zorder=3)
 
-plt.axhline(y=0.125, color='red', linestyle='--', label='Random Level (0.125)')
-plt.title(f'Error Mitigation Case Study: {backend.name}', fontsize=14)
-plt.ylabel('P(111) Success Probability')
-plt.grid(axis='y', alpha=0.3, zorder=0)
+# Рисуем столбцы
+bars = plt.bar(data.keys(), data.values(), color=colors, edgecolor='black', zorder=3, width=0.6)
 
+# Устанавливаем лимит по Y с запасом 20%, чтобы столбики не упирались в край
+plt.ylim(0, max(data.values()) * 1.2)
+
+# Рисуем красный пунктир ПОВЕРХ (zorder=5)
+plt.axhline(y=0.125, color='red', linestyle='--', linewidth=2, label='Порог шума (0.125)', zorder=5)
+
+# Названия на русском
+plt.title(f'Эффективность митигации ошибок на процессоре {backend.name}', fontsize=14, fontweight='bold', pad=20)
+plt.ylabel('Вероятность успеха $P(111)$', fontsize=12)
+plt.xlabel('Метод коррекции', fontsize=12)
+
+# Сетка только по горизонтали
+plt.grid(axis='y', alpha=0.3, linestyle='--', zorder=0)
+
+# Добавляем значения над столбиками
 for bar in bars:
     y = bar.get_height()
-    plt.text(bar.get_x() + bar.get_width()/2, y + 0.002, f"{y:.4f}", ha='center', fontweight='bold')
+    plt.text(bar.get_x() + bar.get_width()/2, y + (max(data.values()) * 0.02), 
+             f"{y:.4f}", ha='center', fontweight='bold', fontsize=10, zorder=6)
 
-plt.legend()
+plt.legend(loc='upper left', frameon=True)
 plt.tight_layout()
-plt.savefig(img_path, dpi=150)
+
+plt.savefig(img_path, dpi=300) # Повысил DPI для печати в дипломе
 print(f">>> График сохранен: {img_path}")
