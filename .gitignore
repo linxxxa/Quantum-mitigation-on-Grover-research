@@ -7,11 +7,15 @@ __pycache__/
 venv/
 ENV/
 
-# --- Jupyter Notebooks ---
+# --- Jupyter ---
 .ipynb_checkpoints
 
-# --- Результаты наших расчетов ---
-# Игнорируем логи и графики, чтобы в Git попадал только код
+# --- Logs / runtime ---
+logs/
+*.log
+*.pid
+
+# --- Local plots / scratch ---
 quantum_research_results.txt
 quantum_research_plot.png
 brisbane_127q_results.png
@@ -21,9 +25,7 @@ final_plot.png
 result.png
 quantum_result_plot.png
 
-# --- Системные файлы Mac ---
+# --- OS / IDE ---
 .DS_Store
-
-# --- Настройки VS Code / PyCharm ---
 .vscode/
 .idea/
